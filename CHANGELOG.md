@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4
+
+- Normalize browser fetch URLs when Home Assistant ingress opens the iframe at a double-slash path such as `/api/hassio_ingress/<token>//`.
+
 ## 0.3.3
 
 - Recover legacy double-encoded runtime/search settings so the runtime drawer and immediate-run path show normal config again.
