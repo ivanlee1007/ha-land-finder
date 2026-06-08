@@ -1,0 +1,12 @@
+{
+  "domain": "ha_land_finder",
+  "name": "HA Land Finder",
+  "codeowners": ["@ivanlee1007"],
+  "config_flow": true,
+  "dependencies": ["http", "frontend"],
+  "documentation": "https://github.com/ivanlee1007/ha-land-finder",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/ivanlee1007/ha-land-finder/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

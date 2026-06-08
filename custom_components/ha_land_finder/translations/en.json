@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Land Finder",
+        "description": "Run the 591 Land Finder web app alongside Home Assistant.",
+        "data": {
+          "repo_url": "Land Finder skill repository URL",
+          "workdir": "Working directory under Home Assistant config",
+          "port": "Local web port",
+          "mysql_url": "MySQL URL",
+          "node_binary": "Node.js executable",
+          "npm_binary": "npm executable",
+          "panel_url": "Panel iframe/proxy URL",
+          "panel_path": "Sidebar panel path",
+          "auto_start": "Start when Home Assistant starts",
+          "auto_install": "Clone/install automatically",
+          "auto_update": "Pull updates on startup"
+        }
+      }
+    }
+  }
+}

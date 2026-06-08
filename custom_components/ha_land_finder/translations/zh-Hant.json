@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Land Finder",
+        "description": "讓 591 Land Finder 隨 Home Assistant 啟動並在側邊欄顯示。",
+        "data": {
+          "repo_url": "Land Finder skill GitHub URL",
+          "workdir": "Home Assistant config 下的工作目錄",
+          "port": "本機 Web port",
+          "mysql_url": "MySQL 連線 URL",
+          "node_binary": "Node.js 執行檔",
+          "npm_binary": "npm 執行檔",
+          "panel_url": "側邊欄 iframe/proxy URL",
+          "panel_path": "側邊欄路徑",
+          "auto_start": "Home Assistant 啟動時一起啟動",
+          "auto_install": "自動 clone/install",
+          "auto_update": "啟動時自動 pull 更新"
+        }
+      }
+    }
+  }
+}
