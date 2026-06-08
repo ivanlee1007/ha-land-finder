@@ -142,7 +142,7 @@ export async function backfillDetails(db, { limit = 50, signal } = {}, onProgres
     if (signal?.aborted) throw new Error('detail backfill aborted');
     try {
       const d = await fetchDetail(r.id, signal, r.property_type === 'house' ? 'house' : 'land');
-      await db.execute(`UPDATE properties SET detail_json=CAST(? AS JSON), detail_description=?, zoning=?, land_category=?, ownership=?, land_number=?, frontage_depth=?, infrastructure=?, disliked_facilities=?, layout_text=COALESCE(?, layout_text), bedroom_count=COALESCE(?, bedroom_count), floor_text=COALESCE(?, floor_text), parking_text=COALESCE(?, parking_text), house_age=COALESCE(?, house_age), house_age_year=COALESCE(?, house_age_year), detail_error=NULL, listing_status='active', unavailable_at=NULL, detail_fetched_at=? WHERE id=?`, [
+      await db.execute(`UPDATE properties SET detail_json=?, detail_description=?, zoning=?, land_category=?, ownership=?, land_number=?, frontage_depth=?, infrastructure=?, disliked_facilities=?, layout_text=COALESCE(?, layout_text), bedroom_count=COALESCE(?, bedroom_count), floor_text=COALESCE(?, floor_text), parking_text=COALESCE(?, parking_text), house_age=COALESCE(?, house_age), house_age_year=COALESCE(?, house_age_year), detail_error=NULL, listing_status='active', unavailable_at=NULL, detail_fetched_at=? WHERE id=?`, [
         JSON.stringify(d.detail_json || {}), d.detail_description ?? null, d.zoning ?? null, d.land_category ?? null, d.ownership ?? null, d.land_number ?? null, d.frontage_depth ?? null, d.infrastructure ?? null, d.disliked_facilities ?? null, d.layout_text || null, d.bedroom_count ?? null, d.floor_text || null, d.parking_text || null, d.house_age || null, d.house_age_year ?? null, d.detail_fetched_at, r.id
       ]);
       updated++;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Fix MariaDB-compatible JSON column writes during scraping, detail backfill, manual edits, and saved search writes.
+- Parse persisted runtime/search settings on the server before using them for immediate runs.
+
 ## 0.3.1
 
 - Use relative browser fetch URLs so API calls and town map JSON load correctly through Home Assistant ingress.

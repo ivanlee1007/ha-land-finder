@@ -235,7 +235,7 @@ async function upsert(db, x) {
       (id, source_site, source_id, source_key, houseid, region_id, region_name, property_type, sale_kind, title, price_wan, area_ping, unit_price,
        layout_text, bedroom_count, floor_text, parking_text, house_age, house_age_year, address, section_name, segment_name, road_text,
        land_number, detail_description, detail_json, tags, photo_url, url, raw, detail_fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, CAST(? AS JSON), CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON DUPLICATE KEY UPDATE
       source_site=VALUES(source_site), source_id=VALUES(source_id), source_key=VALUES(source_key), houseid=VALUES(houseid), region_id=VALUES(region_id), region_name=VALUES(region_name), property_type=VALUES(property_type), sale_kind=VALUES(sale_kind),
       title=IF(is_favorite=1,title,VALUES(title)), price_wan=IF(is_favorite=1,price_wan,VALUES(price_wan)), area_ping=IF(is_favorite=1,area_ping,VALUES(area_ping)), unit_price=VALUES(unit_price),

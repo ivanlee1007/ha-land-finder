@@ -91,7 +91,10 @@ function toScrapeOptions(body = {}) {
 
 async function readSetting(key) {
   const [rows] = await db.execute('SELECT setting_value FROM app_settings WHERE setting_key=?', [key]);
-  return rows[0]?.setting_value || null;
+  const value = rows[0]?.setting_value;
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return value; }
 }
 
 async function writeSetting(key, value) {
@@ -387,7 +390,7 @@ app.put('/api/properties/:id', async (req, res) => {
   await db.execute(`UPDATE properties SET
     title=?, price_wan=?, area_ping=?, unit_price=?, address=?, section_name=?, segment_name=?, road_text=?, road_width_m=?,
     zoning=?, land_category=?, ownership=?, land_number=?, frontage_depth=?, infrastructure=?, disliked_facilities=?,
-    detail_description=?, tags=CAST(? AS JSON), user_score=?, user_note=?, is_favorite=?, user_edited_at=CURRENT_TIMESTAMP
+    detail_description=?, tags=?, user_score=?, user_note=?, is_favorite=?, user_edited_at=CURRENT_TIMESTAMP
     WHERE id=?`, [
     asNullableString(b.title, 512) || '', price, area, unitPrice, asNullableString(b.address, 255), asNullableString(b.section_name, 64),
     asNullableString(b.segment_name, 128), asNullableString(b.road_text, 128), asNullableNumber(b.road_width_m), asNullableString(b.zoning, 255),
@@ -520,7 +523,11 @@ app.get('/api/search-options', async (req, res) => {
 app.get('/api/settings/:key', async (req, res) => {
   const [rows] = await db.execute('SELECT setting_value, updated_at FROM app_settings WHERE setting_key=?', [req.params.key]);
   if (!rows.length) return res.json({ value: null });
-  res.json({ value: rows[0].setting_value, updatedAt: rows[0].updated_at });
+  let value = rows[0].setting_value;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch {}
+  }
+  res.json({ value, updatedAt: rows[0].updated_at });
 });
 
 app.put('/api/settings/:key', async (req, res) => {
@@ -542,7 +549,7 @@ app.post('/api/saved-searches', async (req, res) => {
   const name = String(body.name || '').trim().slice(0, 128);
   if (!name) return res.status(400).json({ error: 'name_required' });
   const criteria = body.criteria && typeof body.criteria === 'object' ? body.criteria : {};
-  const [r] = await db.execute('INSERT INTO saved_searches (name, criteria) VALUES (?, CAST(? AS JSON))', [name, JSON.stringify(criteria)]);
+  const [r] = await db.execute('INSERT INTO saved_searches (name, criteria) VALUES (?, ?)', [name, JSON.stringify(criteria)]);
   const [rows] = await db.execute('SELECT id,name,criteria,created_at,updated_at FROM saved_searches WHERE id=?', [r.insertId]);
   res.json(rows[0]);
 });
@@ -554,7 +561,7 @@ app.put('/api/saved-searches/:id', async (req, res) => {
   if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'bad_id' });
   if (!name) return res.status(400).json({ error: 'name_required' });
   const criteria = body.criteria && typeof body.criteria === 'object' ? body.criteria : {};
-  const [r] = await db.execute('UPDATE saved_searches SET name=?, criteria=CAST(? AS JSON) WHERE id=?', [name, JSON.stringify(criteria), id]);
+  const [r] = await db.execute('UPDATE saved_searches SET name=?, criteria=? WHERE id=?', [name, JSON.stringify(criteria), id]);
   if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
   const [rows] = await db.execute('SELECT id,name,criteria,created_at,updated_at FROM saved_searches WHERE id=?', [id]);
   res.json(rows[0]);
