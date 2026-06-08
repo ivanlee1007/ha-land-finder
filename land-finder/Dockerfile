@@ -7,6 +7,7 @@ RUN apk add --no-cache \
     git \
     nodejs \
     npm \
+    python3 \
     mariadb-client \
     jq \
     sed

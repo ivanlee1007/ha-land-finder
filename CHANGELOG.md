@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+
+- Install Python in the add-on image and handle unzip spawn errors so LVR import cannot crash the Node server when extracting MOI ZIP files.
+
 ## 0.3.4
 
 - Normalize browser fetch URLs when Home Assistant ingress opens the iframe at a double-slash path such as `/api/hassio_ingress/<token>//`.
