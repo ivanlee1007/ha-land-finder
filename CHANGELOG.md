@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6
+
+- Do not show 591 house listings as unavailable just because the detail API returned an empty/unavailable detail response while the listing API still found the item.
+- Base unavailable filters, badges, cleanup, and delete eligibility on `listing_status`, not transient detail-fetch errors.
+
 ## 0.3.5
 
 - Install Python in the add-on image and handle unzip spawn errors so LVR import cannot crash the Node server when extracting MOI ZIP files.

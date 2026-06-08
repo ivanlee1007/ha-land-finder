@@ -194,7 +194,7 @@ function introText(x){const d=detailObj(x); return String(x.land_intro || d['土
 function introSummary(x){const text=introText(x); if(!text)return '<div class="muted">尚未補抓</div>'; const compact=text.replace(/\s+/g,' ').trim(); const cut=32; const head=compact.slice(0,cut); if(compact.length<=cut)return `<div class="introSummary">${esc(compact)}</div>`; return `<details class="introSummary"><summary><span class="introShort">${esc(head)}…</span><span class="introIcon" aria-label="展開完整土地介紹">展開</span></summary><span class="introFull">${esc(compact)} <button type="button" class="introCollapse" onclick="this.closest('details').open=false">收合</button></span></details>`}
 function yn(v){return v==null||v===''?'—':esc(v)}
 
-function isUnavailable(x){return x.listing_status==='unavailable'||String(x.detail_error||'').startsWith('detail HTTP 404')||String(x.detail_error||'').startsWith('detail unavailable')}
+function isUnavailable(x){return x.listing_status==='unavailable'}
 function unavailableBadge(x){return isUnavailable(x)?` <span class="tag unavailableTag" title="${esc(x.unavailable_at||x.detail_error||'')}">已下架</span>`:''}
 function editButton(x){return `<button type="button" class="editBtn" data-edit-id="${esc(x.id)}" title="物件編輯">編輯</button>`}
 function deleteButton(x){return isUnavailable(x)?`<button type="button" class="deleteBtn" data-delete-id="${esc(x.id)}" title="移除已下架物件">移除</button>`:`<button type="button" class="editBtn" data-mark-unavailable-id="${esc(x.id)}" title="人工標記為已下架">標下架</button>`}
