@@ -1,0 +1,15 @@
+{
+  "name": "591-land-finder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "init-db": "node src/init-db.js",
+    "scrape": "node src/scrape.js",
+    "serve": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0"
+  }
+}

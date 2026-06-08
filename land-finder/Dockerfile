@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     jq \
     sed
 
+COPY app/ /opt/land-finder/
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 

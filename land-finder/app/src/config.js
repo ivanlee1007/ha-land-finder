@@ -1,0 +1,17 @@
+export const MYSQL_URL = process.env.MYSQL_URL || 'mysql://land591:land591_local_pw@127.0.0.1:3306/land591';
+export const PORT = Number(process.env.PORT || 5910);
+
+export const REGIONS = [
+  [1, '台北市'], [2, '基隆市'], [3, '新北市'], [4, '新竹縣'], [5, '新竹市'],
+  [6, '桃園市'], [7, '苗栗縣'], [8, '台中市'], [10, '彰化縣'], [11, '南投縣'],
+  [12, '嘉義市'], [13, '嘉義縣'], [14, '雲林縣'], [15, '台南市'], [17, '高雄市'],
+  [19, '屏東縣'], [21, '宜蘭縣'], [23, '花蓮縣'], [22, '台東縣']
+];
+
+export const SEARCH = {
+  maxPriceWan: 360,
+  minAreaPing: 756,
+  pageSize: 30,
+  delayMs: 700,
+  maxPagesPerRegion: Number(process.env.MAX_PAGES_PER_REGION || 20)
+};

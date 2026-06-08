@@ -46,7 +46,14 @@ APP_DIR="${REPO_DIR}/assets/591-land-finder"
 bashio::log.info "Starting 591 Land Finder add-on"
 bashio::log.info "Source: ${SOURCE_REPO} (${SOURCE_REF})"
 
-if [[ ! -d "${REPO_DIR}/.git" ]]; then
+BUNDLED_APP_DIR="/opt/land-finder"
+
+if [[ -d "${BUNDLED_APP_DIR}" && -f "${BUNDLED_APP_DIR}/package.json" ]]; then
+  bashio::log.info "Using bundled Land Finder app"
+  rm -rf "${APP_DIR}"
+  mkdir -p "$(dirname "${APP_DIR}")"
+  cp -a "${BUNDLED_APP_DIR}/." "${APP_DIR}/"
+elif [[ ! -d "${REPO_DIR}/.git" ]]; then
   rm -rf "${REPO_DIR}"
   bashio::log.info "Cloning Land Finder source"
   git clone --depth=1 --branch "${SOURCE_REF}" "${SOURCE_REPO}" "${REPO_DIR}"
