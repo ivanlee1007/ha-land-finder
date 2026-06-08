@@ -8,6 +8,7 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     mariadb-client \
+    jq \
     sed
 
 COPY run.sh /run.sh

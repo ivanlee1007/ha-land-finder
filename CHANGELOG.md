@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Add `jq` to the image so the fallback options reader works when the base image does not provide bashio.
+
 ## 0.2.1
 
 - Use official Home Assistant architecture-specific base images for add-on builds.
