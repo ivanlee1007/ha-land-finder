@@ -1,0 +1,22 @@
+configuration:
+  source_repo:
+    name: Source repository
+    description: Git repository containing the land591-finder-skill project.
+  source_ref:
+    name: Source ref
+    description: Branch, tag, or commit to check out.
+  auto_update:
+    name: Auto update source on start
+    description: Pull the source repository when the add-on starts.
+  mysql_url:
+    name: MySQL URL override
+    description: Optional full mysql:// URL. Leave empty to use the Home Assistant MariaDB service credentials.
+  database:
+    name: Database name
+    description: Database name used when mysql_url is empty.
+  run_init_db:
+    name: Initialize database on start
+    description: Run npm run init-db before starting the web server.
+  max_pages_per_region:
+    name: Max pages per region
+    description: Default scraper page limit per selected region.

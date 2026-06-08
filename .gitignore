@@ -1,8 +1,12 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
+# OS/editor
 .DS_Store
-.env
+Thumbs.db
 .vscode/
 .idea/
+
+# Runtime/build artifacts
+node_modules/
+*.log
+.env
+/data/
+/tmp/

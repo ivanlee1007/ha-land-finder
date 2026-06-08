@@ -1,0 +1,41 @@
+name: 591 Land Finder
+version: "0.2.0"
+slug: land_finder
+description: Run the 591 Taiwan land/house finder web app inside Home Assistant.
+url: https://github.com/ivanlee1007/ha-land-finder/tree/main/land-finder
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: services
+boot: auto
+init: false
+ingress: true
+ingress_port: 5910
+ingress_entry: /
+panel_icon: mdi:map-search
+panel_title: Land Finder
+ports:
+  5910/tcp: 5910
+ports_description:
+  5910/tcp: Optional direct access to the Land Finder web UI
+services:
+  - mysql:need
+options:
+  source_repo: https://github.com/ivanlee1007/land591-finder-skill.git
+  source_ref: main
+  auto_update: true
+  mysql_url: ""
+  database: land591
+  run_init_db: true
+  max_pages_per_region: 20
+schema:
+  source_repo: url
+  source_ref: str
+  auto_update: bool
+  mysql_url: str?
+  database: str
+  run_init_db: bool
+  max_pages_per_region: int(1,200)

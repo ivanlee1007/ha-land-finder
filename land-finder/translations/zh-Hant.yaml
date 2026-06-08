@@ -1,0 +1,22 @@
+configuration:
+  source_repo:
+    name: 來源 repository
+    description: 包含 land591-finder-skill 專案的 Git repository。
+  source_ref:
+    name: 來源版本
+    description: 要 checkout 的 branch、tag 或 commit。
+  auto_update:
+    name: 啟動時自動更新來源
+    description: Add-on 啟動時自動 git pull。
+  mysql_url:
+    name: MySQL URL 覆寫
+    description: 可選的完整 mysql:// URL；留空會使用 Home Assistant MariaDB service credentials。
+  database:
+    name: 資料庫名稱
+    description: mysql_url 留空時使用的資料庫名稱。
+  run_init_db:
+    name: 啟動時初始化資料庫
+    description: 啟動 Web UI 前先執行 npm run init-db。
+  max_pages_per_region:
+    name: 每個縣市最多抓取頁數
+    description: 預設 scraper 對每個選取縣市的頁數上限。
