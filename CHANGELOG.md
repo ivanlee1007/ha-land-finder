@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Use relative browser fetch URLs so API calls and town map JSON load correctly through Home Assistant ingress.
+
 ## 0.3.0
 
 - Bundle the Land Finder Node app inside the add-on image so HA OS does not need runtime GitHub access to the source repository.
