@@ -91,10 +91,16 @@ function toScrapeOptions(body = {}) {
 
 async function readSetting(key) {
   const [rows] = await db.execute('SELECT setting_value FROM app_settings WHERE setting_key=?', [key]);
-  const value = rows[0]?.setting_value;
+  let value = rows[0]?.setting_value;
   if (value == null) return null;
-  if (typeof value === 'object') return value;
-  try { return JSON.parse(value); } catch { return value; }
+  for (let i = 0; i < 3 && typeof value === 'string'; i++) {
+    try { value = JSON.parse(value); } catch { break; }
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(k => /^\d+$/.test(k))) {
+    const text = Object.entries(value).sort((a, b) => Number(a[0]) - Number(b[0])).map(([, v]) => String(v)).join('');
+    try { value = JSON.parse(text); } catch { return null; }
+  }
+  return value && typeof value === 'object' ? value : null;
 }
 
 async function writeSetting(key, value) {
@@ -523,11 +529,7 @@ app.get('/api/search-options', async (req, res) => {
 app.get('/api/settings/:key', async (req, res) => {
   const [rows] = await db.execute('SELECT setting_value, updated_at FROM app_settings WHERE setting_key=?', [req.params.key]);
   if (!rows.length) return res.json({ value: null });
-  let value = rows[0].setting_value;
-  if (typeof value === 'string') {
-    try { value = JSON.parse(value); } catch {}
-  }
-  res.json({ value, updatedAt: rows[0].updated_at });
+  res.json({ value: await readSetting(req.params.key), updatedAt: rows[0].updated_at });
 });
 
 app.put('/api/settings/:key', async (req, res) => {

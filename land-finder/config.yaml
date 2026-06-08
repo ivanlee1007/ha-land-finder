@@ -1,5 +1,5 @@
 name: 591 Land Finder
-version: "0.3.2"
+version: "0.3.3"
 slug: land_finder
 description: Run the 591 Taiwan land/house finder web app inside Home Assistant.
 url: https://github.com/ivanlee1007/ha-land-finder/tree/main/land-finder

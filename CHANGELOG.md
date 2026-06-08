@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Recover legacy double-encoded runtime/search settings so the runtime drawer and immediate-run path show normal config again.
+
 ## 0.3.2
 
 - Fix MariaDB-compatible JSON column writes during scraping, detail backfill, manual edits, and saved search writes.
