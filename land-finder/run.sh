@@ -6,16 +6,14 @@ mkdir -p /share
 exec > >(tee -a /share/land-finder.log) 2>&1
 trap 'echo "[fatal] Land Finder add-on failed at line ${LINENO} with exit code $?"' ERR
 
-if [[ -f /usr/lib/bashio/bashio ]]; then
-  # shellcheck source=/dev/null
-  source /usr/lib/bashio/bashio
-else
-  bashio::log.info() { echo "[info] $*"; }
-  bashio::log.warning() { echo "[warn] $*"; }
-  bashio::log.fatal() { echo "[fatal] $*"; exit 1; }
-  bashio::config() { jq -r --arg key "$1" '.[$key] // empty' /data/options.json; }
-  bashio::services.available() { return 1; }
-fi
+# Home Assistant's official base image may include a bashio helper that expects
+# a different sourcing context. Keep this add-on self-contained and read options
+# directly from /data/options.json instead of sourcing bashio.
+bashio::log.info() { echo "[info] $*"; }
+bashio::log.warning() { echo "[warn] $*"; }
+bashio::log.fatal() { echo "[fatal] $*"; exit 1; }
+bashio::config() { jq -r --arg key "$1" '.[$key] // empty' /data/options.json; }
+bashio::services.available() { return 1; }
 
 option() {
   local key="$1"

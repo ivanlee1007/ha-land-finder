@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Avoid sourcing bashio directly; read add-on options with jq to prevent bashio source-context startup failures.
+
 ## 0.2.3
 
 - Map `/share` and tee runtime logs to `/share/land-finder.log` for troubleshooting on HA OS.
