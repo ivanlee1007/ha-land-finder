@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Map `/share` and tee runtime logs to `/share/land-finder.log` for troubleshooting on HA OS.
+
 ## 0.2.2
 
 - Add `jq` to the image so the fallback options reader works when the base image does not provide bashio.

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mkdir -p /share
+: > /share/land-finder.log
+exec > >(tee -a /share/land-finder.log) 2>&1
+trap 'echo "[fatal] Land Finder add-on failed at line ${LINENO} with exit code $?"' ERR
+
 if [[ -f /usr/lib/bashio/bashio ]]; then
   # shellcheck source=/dev/null
   source /usr/lib/bashio/bashio
