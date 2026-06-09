@@ -12,6 +12,15 @@ import { updateLvrHouseMatches } from './lvr-house-stats.js';
 import { scrapeYes319Mvp } from './yes319-mvp.js';
 
 const app = express();
+function wrapAsync(handler) {
+  return handler?.constructor?.name === 'AsyncFunction'
+    ? (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
+    : handler;
+}
+for (const method of ['get', 'post', 'put', 'delete', 'patch']) {
+  const register = app[method].bind(app);
+  app[method] = (...args) => register(...args.map(arg => typeof arg === 'function' ? wrapAsync(arg) : arg));
+}
 const db = await pool();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 await ensureSchema(db);
@@ -745,6 +754,12 @@ app.post('/api/runtime-run-now', async (_req, res) => {
 app.get('/api/runs', async (_req, res) => {
   const [rows] = await db.query('SELECT * FROM scrape_runs ORDER BY id DESC LIMIT 20');
   res.json(rows);
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ ok: false, error: String(err?.message || err) });
 });
 
 app.listen(PORT, '127.0.0.1', () => console.log(`591 land finder: http://127.0.0.1:${PORT}`));
