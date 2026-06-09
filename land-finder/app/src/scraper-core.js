@@ -174,7 +174,7 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
        has_video, is_below_stand, is_high_value, tags, photo_url, url, raw,
        detail_json, detail_description, zoning, land_category, ownership, land_number, frontage_depth, infrastructure, disliked_facilities, detail_error, detail_fetched_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       houseid=VALUES(houseid), region_id=VALUES(region_id), region_name=VALUES(region_name),
       title=IF(is_favorite=1,title,VALUES(title)), price_wan=IF(is_favorite=1,price_wan,VALUES(price_wan)), area_ping=IF(is_favorite=1,area_ping,VALUES(area_ping)),
