@@ -118,6 +118,10 @@ async function readSetting(key) {
   return parseSettingValue(rows[0]?.setting_value) || null;
 }
 
+function normalizeSavedSearchRow(row) {
+  return row ? { ...row, criteria: parseSettingValue(row.criteria) || {} } : row;
+}
+
 async function writeSetting(key, value) {
   await db.execute(
     `INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
@@ -658,7 +662,7 @@ app.put('/api/settings/:key', async (req, res) => {
 
 app.get('/api/saved-searches', async (_req, res) => {
   const [rows] = await db.query('SELECT id,name,criteria,created_at,updated_at FROM saved_searches ORDER BY updated_at DESC, id DESC');
-  res.json(rows);
+  res.json(rows.map(normalizeSavedSearchRow));
 });
 
 app.post('/api/saved-searches', async (req, res) => {
@@ -668,7 +672,7 @@ app.post('/api/saved-searches', async (req, res) => {
   const criteria = body.criteria && typeof body.criteria === 'object' ? body.criteria : {};
   const [r] = await db.execute('INSERT INTO saved_searches (name, criteria) VALUES (?, ?)', [name, JSON.stringify(criteria)]);
   const [rows] = await db.execute('SELECT id,name,criteria,created_at,updated_at FROM saved_searches WHERE id=?', [r.insertId]);
-  res.json(rows[0]);
+  res.json(normalizeSavedSearchRow(rows[0]));
 });
 
 app.put('/api/saved-searches/:id', async (req, res) => {
@@ -681,7 +685,7 @@ app.put('/api/saved-searches/:id', async (req, res) => {
   const [r] = await db.execute('UPDATE saved_searches SET name=?, criteria=? WHERE id=?', [name, JSON.stringify(criteria), id]);
   if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
   const [rows] = await db.execute('SELECT id,name,criteria,created_at,updated_at FROM saved_searches WHERE id=?', [id]);
-  res.json(rows[0]);
+  res.json(normalizeSavedSearchRow(rows[0]));
 });
 
 app.delete('/api/saved-searches/:id', async (req, res) => {
