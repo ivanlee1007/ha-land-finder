@@ -165,6 +165,7 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
   const propertyType = options?.propertyType || 'land';
   const tags = tagsOf(item, propertyType);
   const url = item.url || (propertyType === 'house' ? `https://sale.591.com.tw/home/house/detail/2/${id}.html` : `https://land.591.com.tw/sale/${id}`);
+  const [existing] = await conn.execute('SELECT id FROM properties WHERE id=? LIMIT 1', [id]);
   await conn.execute(`
     INSERT INTO properties
       (id, houseid, region_id, region_name, title, price_wan, area_ping, unit_price, address,
@@ -173,7 +174,7 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
        has_video, is_below_stand, is_high_value, tags, photo_url, url, raw,
        detail_json, detail_description, zoning, land_category, ownership, land_number, frontage_depth, infrastructure, disliked_facilities, detail_error, detail_fetched_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       houseid=VALUES(houseid), region_id=VALUES(region_id), region_name=VALUES(region_name),
       title=IF(is_favorite=1,title,VALUES(title)), price_wan=IF(is_favorite=1,price_wan,VALUES(price_wan)), area_ping=IF(is_favorite=1,area_ping,VALUES(area_ping)),
@@ -193,8 +194,8 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
       infrastructure=IF(is_favorite=1 OR VALUES(infrastructure) IS NULL, infrastructure, VALUES(infrastructure)),
       disliked_facilities=IF(is_favorite=1 OR VALUES(disliked_facilities) IS NULL, disliked_facilities, VALUES(disliked_facilities)),
       detail_error=VALUES(detail_error), detail_fetched_at=IF(VALUES(detail_fetched_at) IS NULL, detail_fetched_at, VALUES(detail_fetched_at)),
-      listing_status='active',
-      unavailable_at=NULL,
+      listing_status=IF(VALUES(detail_error) LIKE 'detail HTTP 404%' OR VALUES(detail_error) LIKE 'detail unavailable%', 'unavailable', 'active'),
+      unavailable_at=IF(VALUES(detail_error) LIKE 'detail HTTP 404%' OR VALUES(detail_error) LIKE 'detail unavailable%', COALESCE(unavailable_at, CURRENT_TIMESTAMP), NULL),
       updated_at=CURRENT_TIMESTAMP
   `, [
     id, item.houseid || `S${id}`, regionId, regionName, item.title || '', parsePriceWan(item), parseAreaPing(item),
@@ -215,6 +216,7 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
     detailError,
     detail?.detail_fetched_at ?? (detailError ? new Date().toISOString().slice(0,19).replace('T',' ') : null)
   ]);
+  return { id, isNew: existing.length === 0 };
 }
 
 async function fetchDetailForMatched(id, signal, propertyType = 'land') {
@@ -272,6 +274,7 @@ export async function scrapeIntoDb(conn, rawOptions = {}, onProgress = () => {})
   let runId;
   let fetched = 0, matched = 0, detailsFetched = 0, detailErrors = 0;
   const matchedIds = new Set();
+  const newIds = [];
   const startedMessage = `${PROPERTY_TYPES[options.propertyType]} 條件 price<=${options.maxPriceWan}, area>=${options.minAreaPing}, regions=${options.regions.map(r => r[1]).join(',')}, sections=${options.sectionNames.join(',') || '不限'}`;
   const [r] = await conn.query(`INSERT INTO scrape_runs(status,message) VALUES ('running', ?)`, [startedMessage]);
   runId = r.insertId;
@@ -290,7 +293,8 @@ export async function scrapeIntoDb(conn, rawOptions = {}, onProgress = () => {})
             const id = houseNumericId(item);
             const { detail, detailError } = await fetchDetailForMatched(id, options.signal, options.propertyType);
             if (detail) detailsFetched++; else if (detailError) detailErrors++;
-            await upsert(conn, regionId, regionName, item, options, detail, detailError);
+            const upsertResult = await upsert(conn, regionId, regionName, item, options, detail, detailError);
+            if (upsertResult?.isNew) newIds.push(upsertResult.id);
             matchedIds.add(id);
             matched++;
           }
@@ -305,11 +309,11 @@ export async function scrapeIntoDb(conn, rawOptions = {}, onProgress = () => {})
     const cp = matched ? await recomputeCpValues(conn) : { updated: 0 };
     const lvrText = houseLvr ? `，中古屋實價匹配 ${houseLvr.matched}/${houseLvr.updated}` : '';
     await conn.execute(`UPDATE scrape_runs SET finished_at=CURRENT_TIMESTAMP,status='ok',message=?,fetched_count=?,matched_count=? WHERE id=?`, [`完整詳情 ${detailsFetched}/${matched}，詳情錯誤 ${detailErrors}，候選下架 ${unavailable.candidates || 0}，確認下架 ${unavailable.markedUnavailable || 0}，仍在線 ${unavailable.verifiedAvailable || 0}${lvrText}，CP值已更新 ${cp.updated} 筆`, fetched, matched, runId]);
-    return { runId, fetched, matched, detailsFetched, detailErrors, markedUnavailable: unavailable.markedUnavailable || 0, houseLvr, cpUpdated: cp.updated, status: 'ok' };
+    return { runId, fetched, matched, detailsFetched, detailErrors, newCount: newIds.length, newIds, markedUnavailable: unavailable.markedUnavailable || 0, houseLvr, cpUpdated: cp.updated, status: 'ok' };
   } catch (err) {
     if (err.name === 'AbortError' || options.signal?.aborted) {
       await conn.execute(`UPDATE scrape_runs SET finished_at=CURRENT_TIMESTAMP,status='cancelled',message=?,fetched_count=?,matched_count=? WHERE id=?`, [String(err.message || err), fetched, matched, runId]);
-      return { runId, fetched, matched, detailsFetched, detailErrors, status: 'cancelled', message: String(err.message || err) };
+      return { runId, fetched, matched, detailsFetched, detailErrors, newCount: newIds.length, newIds, status: 'cancelled', message: String(err.message || err) };
     }
     await conn.execute(`UPDATE scrape_runs SET finished_at=CURRENT_TIMESTAMP,status='error',message=?,fetched_count=?,matched_count=? WHERE id=?`, [String(err.stack || err), fetched, matched, runId]);
     throw err;

@@ -234,4 +234,25 @@ export async function ensureSchema(conn) {
       KEY idx_updated_at (updated_at)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS notification_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      run_id BIGINT NULL,
+      property_id BIGINT NOT NULL,
+      event_type VARCHAR(32) NOT NULL DEFAULT 'new_listing',
+      title VARCHAR(512) NULL,
+      message TEXT NULL,
+      channel VARCHAR(64) NOT NULL DEFAULT 'local-ui',
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      read_at DATETIME NULL,
+      sent_at DATETIME NULL,
+      error TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_notification_event (event_type, property_id),
+      KEY idx_notification_created (created_at),
+      KEY idx_notification_read (read_at),
+      KEY idx_notification_run (run_id)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
 }

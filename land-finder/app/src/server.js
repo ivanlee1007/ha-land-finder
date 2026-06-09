@@ -1,4 +1,6 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { pool, ensureSchema } from './db.js';
 import { PORT, REGIONS, SEARCH } from './config.js';
 import { scrapeIntoDb } from './scraper-core.js';
@@ -11,11 +13,12 @@ import { scrapeYes319Mvp } from './yes319-mvp.js';
 
 const app = express();
 const db = await pool();
+const __dirname = dirname(fileURLToPath(import.meta.url));
 await ensureSchema(db);
-await db.execute("UPDATE properties SET listing_status='active', unavailable_at=NULL WHERE source_site='591' AND property_type='house' AND detail_error LIKE 'detail unavailable%' AND COALESCE(listing_status, 'active') = 'unavailable'");
+await db.execute("UPDATE properties SET listing_status='unavailable', unavailable_at=COALESCE(unavailable_at, detail_fetched_at, updated_at, CURRENT_TIMESTAMP) WHERE (detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%') AND COALESCE(listing_status, 'active') <> 'unavailable'");
 app.use(express.json());
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-app.use(express.static(new URL('../public', import.meta.url).pathname));
+app.use(express.static(join(__dirname, '..', 'public')));
 
 function keywordList(v) {
   return String(v || '').split(/[\n,，;；]+/).map(s => s.trim()).filter(Boolean).slice(0, 20);
@@ -47,6 +50,10 @@ const DEFAULT_RUNTIME_CONFIG = {
   notifyOnlyNew: true,
   notifyMinMatches: 1,
   notifyTarget: '',
+  notifyHaPersistent: false,
+  notifyHaMobile: false,
+  notifyHaMobileService: 'mobile_app_iphone',
+  notifyMaxItems: 5,
   lastAutoRunAt: null,
   nextAutoRunAt: null,
   lastNotification: null
@@ -66,6 +73,10 @@ function sanitizeRuntimeConfig(value = {}) {
     notifyOnlyNew: value.notifyOnlyNew !== false,
     notifyMinMatches: Math.trunc(Math.max(0, Number(value.notifyMinMatches ?? DEFAULT_RUNTIME_CONFIG.notifyMinMatches))),
     notifyTarget: String(value.notifyTarget || '').slice(0, 256),
+    notifyHaPersistent: value.notifyHaPersistent === true,
+    notifyHaMobile: value.notifyHaMobile === true,
+    notifyHaMobileService: String(value.notifyHaMobileService || DEFAULT_RUNTIME_CONFIG.notifyHaMobileService).replace(/^notify\./, '').slice(0, 128),
+    notifyMaxItems: Math.trunc(Math.max(1, Math.min(20, Number(value.notifyMaxItems || DEFAULT_RUNTIME_CONFIG.notifyMaxItems)))),
     lastAutoRunAt: value.lastAutoRunAt || null,
     nextAutoRunAt: value.nextAutoRunAt || null,
     lastNotification: value.lastNotification || null
@@ -89,18 +100,15 @@ function toScrapeOptions(body = {}) {
   };
 }
 
+function parseSettingValue(value) {
+  if (!value) return null;
+  if (typeof value === 'object' && !Buffer.isBuffer(value)) return value;
+  try { return JSON.parse(String(value)); } catch { return null; }
+}
+
 async function readSetting(key) {
   const [rows] = await db.execute('SELECT setting_value FROM app_settings WHERE setting_key=?', [key]);
-  let value = rows[0]?.setting_value;
-  if (value == null) return null;
-  for (let i = 0; i < 3 && typeof value === 'string'; i++) {
-    try { value = JSON.parse(value); } catch { break; }
-  }
-  if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(k => /^\d+$/.test(k))) {
-    const text = Object.entries(value).sort((a, b) => Number(a[0]) - Number(b[0])).map(([, v]) => String(v)).join('');
-    try { value = JSON.parse(text); } catch { return null; }
-  }
-  return value && typeof value === 'object' ? value : null;
+  return parseSettingValue(rows[0]?.setting_value) || null;
 }
 
 async function writeSetting(key, value) {
@@ -109,6 +117,83 @@ async function writeSetting(key, value) {
      ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value), updated_at=CURRENT_TIMESTAMP`,
     [key, JSON.stringify(value || {})]
   );
+}
+
+
+function listingLine(row, index) {
+  const price = row.price_wan == null ? '—' : `${Number(row.price_wan).toLocaleString()}萬`;
+  const area = row.area_ping == null ? '—' : `${Number(row.area_ping).toLocaleString()}坪`;
+  const cp = row.cp_score == null ? '' : `｜CP ${Number(row.cp_score).toFixed(1)}`;
+  const kind = row.property_type === 'house' ? '中古屋' : '土地';
+  return `${index}. ${row.region_name || ''}${row.section_name || ''}｜${kind}｜${price}｜${area}${cp}\n   ${row.title || ''}\n   ${row.url || ''}`;
+}
+
+function notificationText(rows, total, source) {
+  const max = runtimeConfig.notifyMaxItems || 5;
+  const listed = rows.slice(0, max).map((row, idx) => listingLine(row, idx + 1)).join('\n\n');
+  const more = total > rows.length ? `\n\n另有 ${total - rows.length} 筆，請開啟 Land Finder 查看。` : '';
+  const sourceText = source === 'auto' ? '自動更新' : source === 'manual-run-now' ? '手動立即更新' : '重新搜尋';
+  return `591 Land Finder ${sourceText}發現 ${total} 筆新物件\n\n${listed}${more}`;
+}
+
+async function callHomeAssistantService(domain, service, payload) {
+  const supervisorToken = process.env.SUPERVISOR_TOKEN || '';
+  const hassToken = process.env.HASS_TOKEN || process.env.HA_TOKEN || '';
+  const base = supervisorToken ? 'http://supervisor/core' : (process.env.HASS_URL || '').replace(/\/$/, '');
+  const token = supervisorToken || hassToken;
+  if (!base || !token) throw new Error('Home Assistant token/base URL unavailable');
+  const res = await fetch(`${base}/api/services/${domain}/${service}`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  if (!res.ok) throw new Error(`HA ${domain}.${service} HTTP ${res.status}: ${await res.text()}`);
+  return res.json().catch(() => ({}));
+}
+
+async function sendExternalNotifications({ title, message }) {
+  const sent = [];
+  const errors = [];
+  if (runtimeConfig.notifyHaPersistent) {
+    try {
+      await callHomeAssistantService('persistent_notification', 'create', { title, message, notification_id: 'land591_new_listings' });
+      sent.push('ha-persistent');
+    } catch (err) { errors.push(`ha-persistent: ${err.message || err}`); }
+  }
+  if (runtimeConfig.notifyHaMobile) {
+    const service = (runtimeConfig.notifyHaMobileService || 'mobile_app_iphone').replace(/^notify\./, '');
+    try {
+      await callHomeAssistantService('notify', service, { title, message, data: { url: '/app/34e54ed0_land_finder' } });
+      sent.push(`notify.${service}`);
+    } catch (err) { errors.push(`notify.${service}: ${err.message || err}`); }
+  }
+  return { sent, errors };
+}
+
+async function recordRunNotifications(source, result, finishedAt) {
+  const ids = [...new Set((result?.newIds || []).map(Number).filter(Number.isFinite))];
+  if (!ids.length) return null;
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await db.execute(`SELECT ${propertySelectFields} FROM properties WHERE id IN (${placeholders}) ORDER BY first_seen_at DESC`, ids);
+  let inserted = 0;
+  for (const row of rows) {
+    const [r] = await db.execute(`
+      INSERT IGNORE INTO notification_events (run_id, property_id, event_type, title, message, channel, status)
+      VALUES (?, ?, 'new_listing', ?, ?, 'local-ui', 'pending')
+    `, [result.runId || null, row.id, row.title || '', `${row.region_name || ''}${row.section_name || ''} ${row.price_wan || ''}萬 ${row.area_ping || ''}坪`]);
+    inserted += Number(r.affectedRows || 0);
+  }
+  const messageRows = rows.slice(0, runtimeConfig.notifyMaxItems || 5);
+  const title = `591 發現 ${inserted || ids.length} 筆新物件`;
+  const message = notificationText(messageRows, inserted || ids.length, source);
+  let delivery = { sent: [], errors: [] };
+  if (runtimeConfig.notifyEnabled && (inserted || ids.length) >= runtimeConfig.notifyMinMatches) {
+    delivery = await sendExternalNotifications({ title, message });
+    const status = delivery.errors.length ? (delivery.sent.length ? 'sent_with_errors' : 'failed') : (delivery.sent.length ? 'sent' : 'pending');
+    await db.execute(`UPDATE notification_events SET channel=?, status=?, sent_at=IF(?='sent' OR ?='sent_with_errors', CURRENT_TIMESTAMP, sent_at), error=? WHERE run_id=? AND event_type='new_listing'`, [delivery.sent.join(',') || 'local-ui', status, status, status, delivery.errors.join('\n') || null, result.runId || null]);
+  }
+  runtimeConfig.lastNotification = { at: finishedAt, message, target: delivery.sent.join(',') || runtimeConfig.notifyTarget || 'local-ui', newCount: inserted || ids.length, errors: delivery.errors };
+  return runtimeConfig.lastNotification;
 }
 
 function publicJob(job) {
@@ -120,17 +205,12 @@ function shouldUpdateRuntimeAfterRun(source) {
 }
 
 async function finishRuntimeRun(source, result, finishedAt) {
-  if (!shouldUpdateRuntimeAfterRun(source)) return;
-  runtimeConfig.lastAutoRunAt = finishedAt;
-  if (runtimeConfig.notifyEnabled && Number(result?.matched || 0) >= runtimeConfig.notifyMinMatches) {
-    runtimeConfig.lastNotification = {
-      at: finishedAt,
-      message: `${source === 'auto' ? '自動更新' : '手動立即更新'}完成：抓取 ${result.fetched}，符合 ${result.matched}，完整詳情 ${result.detailsFetched || 0}/${result.matched || 0}`,
-      target: runtimeConfig.notifyTarget || 'local-ui'
-    };
+  const notification = result?.status === 'ok' ? await recordRunNotifications(source, result, finishedAt) : null;
+  if (shouldUpdateRuntimeAfterRun(source)) {
+    runtimeConfig.lastAutoRunAt = finishedAt;
+    scheduleNextAutoRun();
   }
-  scheduleNextAutoRun();
-  await writeSetting('runtime', runtimeConfig);
+  if (shouldUpdateRuntimeAfterRun(source) || notification) await writeSetting('runtime', runtimeConfig);
 }
 
 async function detailBackfillStats() {
@@ -141,7 +221,7 @@ async function detailBackfillStats() {
         AND (detail_fetched_at IS NULL
           OR (property_type='land' AND (JSON_EXTRACT(detail_json, '$."土地介紹"') IS NULL OR COALESCE(detail_description, '') = '' OR detail_description REGEXP '更多在售詳情，就上591土地'))
           OR (property_type='house' AND (JSON_EXTRACT(detail_json, '$."屋況特色"') IS NULL OR COALESCE(detail_description, '') = '' OR COALESCE(floor_text, '') = ''))) THEN 1 ELSE 0 END) AS missing,
-      SUM(CASE WHEN COALESCE(listing_status, 'active') = 'unavailable' THEN 1 ELSE 0 END) AS unavailable
+      SUM(CASE WHEN COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%' THEN 1 ELSE 0 END) AS unavailable
     FROM properties
   `);
   return { missing: Number(row?.missing || 0), unavailable: Number(row?.unavailable || 0) };
@@ -158,7 +238,7 @@ function withListingIntro(row) {
   return row ? { ...row, land_intro: normalizeListingIntro(row) } : row;
 }
 
-const propertySelectFields = `id,source_site,source_id,source_key,houseid,region_id,region_name,property_type,sale_kind,title,price_wan,area_ping,unit_price,layout_text,bedroom_count,community_name,floor_text,parking_text,house_age,house_age_year,address,section_name,segment_name,road_text,road_width_m,zoning,land_category,ownership,land_number,frontage_depth,infrastructure,disliked_facilities,detail_description,detail_json,detail_error,listing_status,unavailable_at,tags,photo_url,url,user_score,user_note,is_favorite,user_edited_at,cp_score,cp_note,cp_updated_at,lvr_match_level,lvr_sample_count,lvr_median_unit_wan,lvr_recent_years,lvr_basis_json,lvr_updated_at,detail_fetched_at,updated_at`;
+const propertySelectFields = `id,source_site,source_id,source_key,houseid,region_id,region_name,property_type,sale_kind,title,price_wan,area_ping,unit_price,layout_text,bedroom_count,community_name,floor_text,parking_text,house_age,house_age_year,address,section_name,segment_name,road_text,road_width_m,zoning,land_category,ownership,land_number,frontage_depth,infrastructure,disliked_facilities,detail_description,detail_json,detail_error,listing_status,unavailable_at,tags,photo_url,url,user_score,user_note,is_favorite,user_edited_at,cp_score,cp_note,cp_updated_at,lvr_match_level,lvr_sample_count,lvr_median_unit_wan,lvr_recent_years,lvr_basis_json,lvr_updated_at,detail_fetched_at,first_seen_at,updated_at,(SELECT COUNT(*) FROM notification_events ne WHERE ne.property_id=properties.id AND ne.event_type='new_listing' AND ne.read_at IS NULL) AS new_notification_count`;
 
 function asNullableString(v, max = 512) {
   const s = String(v ?? '').trim();
@@ -251,11 +331,39 @@ async function loadRuntimeConfig() {
   await writeSetting('runtime', runtimeConfig);
 }
 
+
+app.get('/api/notifications', async (req, res) => {
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit || 30)));
+  const unreadOnly = req.query.unread === '1';
+  const where = unreadOnly ? 'WHERE ne.read_at IS NULL' : '';
+  const [rows] = await db.execute(`
+    SELECT ne.id, ne.run_id, ne.property_id, ne.event_type, ne.title, ne.message, ne.channel, ne.status, ne.read_at, ne.sent_at, ne.error, ne.created_at,
+      p.region_name, p.section_name, p.price_wan, p.area_ping, p.unit_price, p.cp_score, p.url, p.photo_url, p.property_type
+    FROM notification_events ne
+    LEFT JOIN properties p ON p.id=ne.property_id
+    ${where}
+    ORDER BY ne.created_at DESC, ne.id DESC
+    LIMIT ${limit}
+  `);
+  const [[countRow]] = await db.query(`SELECT COUNT(*) AS unread FROM notification_events WHERE read_at IS NULL`);
+  res.json({ rows, unread: Number(countRow?.unread || 0) });
+});
+
+app.post('/api/notifications/read', async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isFinite) : [];
+  if (ids.length) {
+    await db.execute(`UPDATE notification_events SET read_at=COALESCE(read_at, CURRENT_TIMESTAMP) WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  } else {
+    await db.execute(`UPDATE notification_events SET read_at=COALESCE(read_at, CURRENT_TIMESTAMP) WHERE read_at IS NULL`);
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/properties', async (req, res) => {
   const params = [];
   const where = [];
   if (req.query.unavailableOnly === '1' || req.query.availability === 'unavailable') {
-    where.push("COALESCE(listing_status, 'active') = 'unavailable'");
+    where.push("(COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%')");
   } else if (req.query.includeUnavailable !== '1' && req.query.availability !== 'all') {
     where.push("COALESCE(listing_status, 'active') <> 'unavailable'");
   }
@@ -344,7 +452,7 @@ app.get('/api/properties', async (req, res) => {
 
 app.delete('/api/properties/unavailable', async (req, res) => {
   const keepFavorites = req.query.keepFavorites !== '0';
-  const where = ["COALESCE(listing_status, 'active') = 'unavailable'"];
+  const where = ["(COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%')"];
   if (keepFavorites) where.push('COALESCE(is_favorite,0)=0');
   const [result] = await db.execute(`DELETE FROM properties WHERE ${where.join(' AND ')}`);
   res.json({ ok: true, deleted: Number(result.affectedRows || 0), keepFavorites });
@@ -365,7 +473,7 @@ app.delete('/api/properties/:id', async (req, res) => {
   const [rows] = await db.execute("SELECT id,title,is_favorite,listing_status,detail_error FROM properties WHERE id=? LIMIT 1", [id]);
   if (!rows.length) return res.status(404).json({ error: 'not_found' });
   const row = rows[0];
-  const unavailable = row.listing_status === 'unavailable';
+  const unavailable = row.listing_status === 'unavailable' || String(row.detail_error || '').startsWith('detail HTTP 404') || String(row.detail_error || '').startsWith('detail unavailable');
   if (!unavailable && req.query.force !== '1') return res.status(409).json({ error: 'not_unavailable' });
   if (Number(row.is_favorite || 0) && req.query.force !== '1') return res.status(409).json({ error: 'favorite_protected' });
   await db.execute('DELETE FROM properties WHERE id=?', [id]);
@@ -529,7 +637,7 @@ app.get('/api/search-options', async (req, res) => {
 app.get('/api/settings/:key', async (req, res) => {
   const [rows] = await db.execute('SELECT setting_value, updated_at FROM app_settings WHERE setting_key=?', [req.params.key]);
   if (!rows.length) return res.json({ value: null });
-  res.json({ value: await readSetting(req.params.key), updatedAt: rows[0].updated_at });
+  res.json({ value: rows[0].setting_value, updatedAt: rows[0].updated_at });
 });
 
 app.put('/api/settings/:key', async (req, res) => {

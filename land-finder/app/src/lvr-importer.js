@@ -14,20 +14,17 @@ const COUNTY_BY_CODE = {
   k: ['苗栗縣', 7], m: ['南投縣', 11], n: ['彰化縣', 10], o: ['新竹市', 4], p: ['雲林縣', 14],
   q: ['嘉義縣', 13], t: ['屏東縣', 19], u: ['花蓮縣', 23], v: ['台東縣', 22], w: ['金門縣', null], x: ['澎湖縣', 24]
 };
-const DEFAULT_COUNTY_CODES = ['b','d','e','f','g','h','i','j','k','m','n','o','p','q','t','u','v'];
-const REGION_ID_TO_COUNTY_CODE = Object.fromEntries(
-  Object.entries(COUNTY_BY_CODE)
-    .filter(([, [, regionId]]) => regionId)
-    .map(([code, [, regionId]]) => [String(regionId), code])
-);
-export function countyCodesForRegionIds(regionIds = []) {
-  const codes = [...new Set((Array.isArray(regionIds) ? regionIds : [])
-    .map(x => REGION_ID_TO_COUNTY_CODE[String(Number(x))])
-    .filter(Boolean))];
-  return codes;
-}
+const WEST_CODES = ['b','d','e','f','g','h','i','j','k','m','n','o','p','q','t','u','v'];
 const DEFAULT_SEASONS = ['115S1','114S4','114S3','114S2','114S1','113S4','113S3','113S2','113S1','112S4','112S3','112S2','112S1'];
 const PING_PER_SQM = 0.3025;
+
+export function countyCodesForRegionIds(regionIds = []) {
+  const wanted = new Set((Array.isArray(regionIds) ? regionIds : []).map(Number).filter(Number.isFinite));
+  if (!wanted.size) return WEST_CODES;
+  return Object.entries(COUNTY_BY_CODE)
+    .filter(([, [, regionId]]) => regionId && wanted.has(Number(regionId)))
+    .map(([code]) => code);
+}
 
 function csvParse(text) {
   const rows = [];
@@ -121,11 +118,10 @@ async function extractZip(zipPath, outDir) {
   const { spawn } = await import('node:child_process');
   await new Promise((resolve, reject) => {
     const py = spawn('python3', ['-c', `import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])`, zipPath, outDir], { stdio: 'inherit' });
-    py.on('error', reject);
     py.on('exit', code => code === 0 ? resolve() : reject(new Error(`python unzip exited ${code}`)));
   });
 }
-async function importSeason(db, season, { countyCodes = DEFAULT_COUNTY_CODES, tmpRoot = path.join(os.tmpdir(), 'land591-lvr') } = {}) {
+async function importSeason(db, season, { countyCodes = WEST_CODES, tmpRoot = path.join(os.tmpdir(), 'land591-lvr') } = {}) {
   await fs.mkdir(tmpRoot, { recursive: true });
   const zipPath = path.join(tmpRoot, `${season}.zip`);
   const url = `${DOWNLOAD_BASE}/DownloadSeason?season=${encodeURIComponent(season)}&type=zip&fileName=lvr_landcsv.zip`;
@@ -194,7 +190,7 @@ async function importSeason(db, season, { countyCodes = DEFAULT_COUNTY_CODES, tm
   }
   return { season, imported, houseImported, skipped };
 }
-export async function importLvrLand(db, { seasons = DEFAULT_SEASONS.slice(0, 12), countyCodes = DEFAULT_COUNTY_CODES } = {}) {
+export async function importLvrLand(db, { seasons = DEFAULT_SEASONS.slice(0, 12), countyCodes = WEST_CODES } = {}) {
   await ensureSchema(db);
   const results = [];
   for (const season of seasons) results.push(await importSeason(db, season, { countyCodes }));
@@ -208,7 +204,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const seasonsArg = process.argv.find(x => x.startsWith('--seasons='));
     const countiesArg = process.argv.find(x => x.startsWith('--counties='));
     const seasons = seasonsArg ? seasonsArg.split('=')[1].split(',').filter(Boolean) : DEFAULT_SEASONS.slice(0, 8);
-    const countyCodes = countiesArg ? countiesArg.split('=')[1].split(',').filter(Boolean) : DEFAULT_COUNTY_CODES;
+    const countyCodes = countiesArg ? countiesArg.split('=')[1].split(',').filter(Boolean) : WEST_CODES;
     console.log(await importLvrLand(db, { seasons, countyCodes }));
   } finally {
     await db.end();
