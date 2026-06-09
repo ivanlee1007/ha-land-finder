@@ -194,8 +194,8 @@ async function upsert(conn, regionId, regionName, item, options, detail = null, 
       infrastructure=IF(is_favorite=1 OR VALUES(infrastructure) IS NULL, infrastructure, VALUES(infrastructure)),
       disliked_facilities=IF(is_favorite=1 OR VALUES(disliked_facilities) IS NULL, disliked_facilities, VALUES(disliked_facilities)),
       detail_error=VALUES(detail_error), detail_fetched_at=IF(VALUES(detail_fetched_at) IS NULL, detail_fetched_at, VALUES(detail_fetched_at)),
-      listing_status=IF(VALUES(detail_error) LIKE 'detail HTTP 404%' OR VALUES(detail_error) LIKE 'detail unavailable%', 'unavailable', 'active'),
-      unavailable_at=IF(VALUES(detail_error) LIKE 'detail HTTP 404%' OR VALUES(detail_error) LIKE 'detail unavailable%', COALESCE(unavailable_at, CURRENT_TIMESTAMP), NULL),
+      listing_status='active',
+      unavailable_at=NULL,
       updated_at=CURRENT_TIMESTAMP
   `, [
     id, item.houseid || `S${id}`, regionId, regionName, item.title || '', parsePriceWan(item), parseAreaPing(item),

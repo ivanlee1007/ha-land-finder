@@ -118,6 +118,7 @@ async function extractZip(zipPath, outDir) {
   const { spawn } = await import('node:child_process');
   await new Promise((resolve, reject) => {
     const py = spawn('python3', ['-c', `import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])`, zipPath, outDir], { stdio: 'inherit' });
+    py.on('error', reject);
     py.on('exit', code => code === 0 ? resolve() : reject(new Error(`python unzip exited ${code}`)));
   });
 }

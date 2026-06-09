@@ -15,7 +15,7 @@ const app = express();
 const db = await pool();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 await ensureSchema(db);
-await db.execute("UPDATE properties SET listing_status='unavailable', unavailable_at=COALESCE(unavailable_at, detail_fetched_at, updated_at, CURRENT_TIMESTAMP) WHERE (detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%') AND COALESCE(listing_status, 'active') <> 'unavailable'");
+await db.execute("UPDATE properties SET listing_status='active', unavailable_at=NULL WHERE source_site='591' AND property_type='house' AND detail_error LIKE 'detail unavailable%' AND COALESCE(listing_status, 'active') = 'unavailable'");
 app.use(express.json());
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use(express.static(join(__dirname, '..', 'public')));
@@ -101,9 +101,16 @@ function toScrapeOptions(body = {}) {
 }
 
 function parseSettingValue(value) {
-  if (!value) return null;
-  if (typeof value === 'object' && !Buffer.isBuffer(value)) return value;
-  try { return JSON.parse(String(value)); } catch { return null; }
+  if (value == null) return null;
+  if (Buffer.isBuffer(value)) value = value.toString('utf8');
+  for (let i = 0; i < 3 && typeof value === 'string'; i++) {
+    try { value = JSON.parse(value); } catch { break; }
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(k => /^\d+$/.test(k))) {
+    const text = Object.entries(value).sort((a, b) => Number(a[0]) - Number(b[0])).map(([, v]) => String(v)).join('');
+    try { value = JSON.parse(text); } catch { return null; }
+  }
+  return value && typeof value === 'object' ? value : null;
 }
 
 async function readSetting(key) {
@@ -221,7 +228,7 @@ async function detailBackfillStats() {
         AND (detail_fetched_at IS NULL
           OR (property_type='land' AND (JSON_EXTRACT(detail_json, '$."土地介紹"') IS NULL OR COALESCE(detail_description, '') = '' OR detail_description REGEXP '更多在售詳情，就上591土地'))
           OR (property_type='house' AND (JSON_EXTRACT(detail_json, '$."屋況特色"') IS NULL OR COALESCE(detail_description, '') = '' OR COALESCE(floor_text, '') = ''))) THEN 1 ELSE 0 END) AS missing,
-      SUM(CASE WHEN COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%' THEN 1 ELSE 0 END) AS unavailable
+      SUM(CASE WHEN COALESCE(listing_status, 'active') = 'unavailable' THEN 1 ELSE 0 END) AS unavailable
     FROM properties
   `);
   return { missing: Number(row?.missing || 0), unavailable: Number(row?.unavailable || 0) };
@@ -363,7 +370,7 @@ app.get('/api/properties', async (req, res) => {
   const params = [];
   const where = [];
   if (req.query.unavailableOnly === '1' || req.query.availability === 'unavailable') {
-    where.push("(COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%')");
+    where.push("COALESCE(listing_status, 'active') = 'unavailable'");
   } else if (req.query.includeUnavailable !== '1' && req.query.availability !== 'all') {
     where.push("COALESCE(listing_status, 'active') <> 'unavailable'");
   }
@@ -452,7 +459,7 @@ app.get('/api/properties', async (req, res) => {
 
 app.delete('/api/properties/unavailable', async (req, res) => {
   const keepFavorites = req.query.keepFavorites !== '0';
-  const where = ["(COALESCE(listing_status, 'active') = 'unavailable' OR detail_error LIKE 'detail HTTP 404%' OR detail_error LIKE 'detail unavailable%')"];
+  const where = ["COALESCE(listing_status, 'active') = 'unavailable'"];
   if (keepFavorites) where.push('COALESCE(is_favorite,0)=0');
   const [result] = await db.execute(`DELETE FROM properties WHERE ${where.join(' AND ')}`);
   res.json({ ok: true, deleted: Number(result.affectedRows || 0), keepFavorites });
@@ -473,7 +480,7 @@ app.delete('/api/properties/:id', async (req, res) => {
   const [rows] = await db.execute("SELECT id,title,is_favorite,listing_status,detail_error FROM properties WHERE id=? LIMIT 1", [id]);
   if (!rows.length) return res.status(404).json({ error: 'not_found' });
   const row = rows[0];
-  const unavailable = row.listing_status === 'unavailable' || String(row.detail_error || '').startsWith('detail HTTP 404') || String(row.detail_error || '').startsWith('detail unavailable');
+  const unavailable = row.listing_status === 'unavailable';
   if (!unavailable && req.query.force !== '1') return res.status(409).json({ error: 'not_unavailable' });
   if (Number(row.is_favorite || 0) && req.query.force !== '1') return res.status(409).json({ error: 'favorite_protected' });
   await db.execute('DELETE FROM properties WHERE id=?', [id]);
@@ -637,7 +644,7 @@ app.get('/api/search-options', async (req, res) => {
 app.get('/api/settings/:key', async (req, res) => {
   const [rows] = await db.execute('SELECT setting_value, updated_at FROM app_settings WHERE setting_key=?', [req.params.key]);
   if (!rows.length) return res.json({ value: null });
-  res.json({ value: rows[0].setting_value, updatedAt: rows[0].updated_at });
+  res.json({ value: parseSettingValue(rows[0].setting_value), updatedAt: rows[0].updated_at });
 });
 
 app.put('/api/settings/:key', async (req, res) => {
