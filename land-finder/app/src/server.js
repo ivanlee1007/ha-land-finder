@@ -62,6 +62,9 @@ const DEFAULT_RUNTIME_CONFIG = {
   notifyHaPersistent: false,
   notifyHaMobile: false,
   notifyHaMobileService: 'mobile_app_iphone',
+  notifyHaEmail: false,
+  notifyHaEmailService: 'land_finder_email',
+  notifyHaEmailTarget: '',
   notifyMaxItems: 5,
   lastAutoRunAt: null,
   nextAutoRunAt: null,
@@ -85,6 +88,9 @@ function sanitizeRuntimeConfig(value = {}) {
     notifyHaPersistent: value.notifyHaPersistent === true,
     notifyHaMobile: value.notifyHaMobile === true,
     notifyHaMobileService: String(value.notifyHaMobileService || DEFAULT_RUNTIME_CONFIG.notifyHaMobileService).replace(/^notify\./, '').slice(0, 128),
+    notifyHaEmail: value.notifyHaEmail === true,
+    notifyHaEmailService: String(value.notifyHaEmailService || DEFAULT_RUNTIME_CONFIG.notifyHaEmailService).replace(/^notify\./, '').slice(0, 128),
+    notifyHaEmailTarget: String(value.notifyHaEmailTarget || '').slice(0, 256),
     notifyMaxItems: Math.trunc(Math.max(1, Math.min(20, Number(value.notifyMaxItems || DEFAULT_RUNTIME_CONFIG.notifyMaxItems)))),
     lastAutoRunAt: value.lastAutoRunAt || null,
     nextAutoRunAt: value.nextAutoRunAt || null,
@@ -184,6 +190,15 @@ async function sendExternalNotifications({ title, message }) {
     const service = (runtimeConfig.notifyHaMobileService || 'mobile_app_iphone').replace(/^notify\./, '');
     try {
       await callHomeAssistantService('notify', service, { title, message, data: { url: '/app/34e54ed0_land_finder' } });
+      sent.push(`notify.${service}`);
+    } catch (err) { errors.push(`notify.${service}: ${err.message || err}`); }
+  }
+  if (runtimeConfig.notifyHaEmail) {
+    const service = (runtimeConfig.notifyHaEmailService || 'land_finder_email').replace(/^notify\./, '');
+    const payload = { title, message };
+    if (runtimeConfig.notifyHaEmailTarget) payload.target = runtimeConfig.notifyHaEmailTarget;
+    try {
+      await callHomeAssistantService('notify', service, payload);
       sent.push(`notify.${service}`);
     } catch (err) { errors.push(`notify.${service}: ${err.message || err}`); }
   }
