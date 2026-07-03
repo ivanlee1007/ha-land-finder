@@ -63,7 +63,7 @@ const DEFAULT_RUNTIME_CONFIG = {
   notifyHaMobile: false,
   notifyHaMobileService: 'mobile_app_iphone',
   notifyHaEmail: false,
-  notifyHaEmailService: 'land_finder_email',
+  notifyHaEmailService: 'google_mail',
   notifyHaEmailTarget: '',
   notifyMaxItems: 5,
   lastAutoRunAt: null,
@@ -194,7 +194,7 @@ async function sendExternalNotifications({ title, message }) {
     } catch (err) { errors.push(`notify.${service}: ${err.message || err}`); }
   }
   if (runtimeConfig.notifyHaEmail) {
-    const service = (runtimeConfig.notifyHaEmailService || 'land_finder_email').replace(/^notify\./, '');
+    const service = (runtimeConfig.notifyHaEmailService || 'google_mail').replace(/^notify\./, '');
     const payload = { title, message };
     if (runtimeConfig.notifyHaEmailTarget) payload.target = runtimeConfig.notifyHaEmailTarget;
     try {
